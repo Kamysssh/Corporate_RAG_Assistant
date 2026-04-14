@@ -38,8 +38,9 @@ SEMANTIC_CACHE_THRESHOLD = float(os.getenv("SEMANTIC_CACHE_THRESHOLD", "0.88"))
 # Путь к SQLite относительно каталога assistant_api
 DEFAULT_CACHE_DB = "corporate_rag_cache.db"
 
-# База знаний только из Google Docs (просмотр по ссылке). Ссылки по умолчанию —
-# переопределение через KNOWLEDGE_<ROLE>_GOOGLE_DOCS в .env (через запятую).
+# База знаний только из Google Docs (просмотр по ссылке). В документах — оглавление,
+# разделы: FAQ, типовые обращения, скрипты по роли (по учебному ТЗ); ссылки ниже —
+# переопределяются через KNOWLEDGE_<ROLE>_GOOGLE_DOCS в .env (через запятую).
 KNOWLEDGE_ROOT = "knowledge"
 
 DEFAULT_KNOWLEDGE_GOOGLE_DOCS: dict[str, str] = {

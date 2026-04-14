@@ -20,8 +20,8 @@ from config import (
     knowledge_dir_for_role,
 )
 from embeddings import embed_text
-from openai_client import create_openai_client
 from google_docs_knowledge import get_extra_sources_for_role
+from openai_client import create_openai_client
 from prompts import build_system_prompt
 from vector_store import VectorStore
 
@@ -71,6 +71,7 @@ class RAGPipeline:
                 "или для одной роли: python reindex.py --role hr"
             )
 
+        rebuilt_vector_index = False
         if chunk_count == 0 or force_reindex:
             extras = get_extra_sources_for_role(role)
             if not extras:
@@ -88,11 +89,18 @@ class RAGPipeline:
                 force_reload=force_reindex,
                 extra_sources=extras,
             )
+            rebuilt_vector_index = True
 
         def _embed_for_cache(q: str) -> list[float]:
             return embed_text(q, self.openai_client)
 
         self.cache = SemanticRAGCache(db_path=resolved_cache, embed_fn=_embed_for_cache)
+        if rebuilt_vector_index:
+            self.cache.clear(role=self.role)
+            logger.info(
+                "После переиндексации коллекции очищен семантический кеш для роли %s",
+                self.role,
+            )
         self._system_prompt = build_system_prompt(role)
 
         logger.info("RAG pipeline готов: роль=%s, модель=%s", role, self.model)

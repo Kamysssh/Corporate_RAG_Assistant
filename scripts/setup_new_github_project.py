@@ -1,11 +1,11 @@
 # All ASCII: avoids Windows cp1251 vs utf-8 issues when running the script.
 """Copy tracked project files into a new folder and run git init (fresh repo, no old remote).
 
-Run from project root:
-    python setup_new_github_project.py
+Run from repo root:
+    python scripts/setup_new_github_project.py
 
 Default destination: ../Corporate_RAG_Assistant
-Custom: python setup_new_github_project.py "D:\\path\\to\\NewFolder"
+Custom: python scripts/setup_new_github_project.py "D:\\path\\to\\NewFolder"
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    root = Path(__file__).resolve().parent
+    root = Path(__file__).resolve().parent.parent
     if args.dest:
         dest = Path(args.dest).expanduser().resolve()
     else:
@@ -42,7 +42,6 @@ def main() -> int:
 
     dest.mkdir(parents=True, exist_ok=True)
 
-    # Only tracked files from last commit (no venv, .env, DBs, etc.)
     archive = subprocess.check_output(["git", "archive", "HEAD"], cwd=root)
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as tf:
         try:
