@@ -86,19 +86,3 @@ Copy-Item .env.example .env
 .\venv\Scripts\python.exe assistant_api\evaluate_ragas.py
 ```
 
-## Вспомогательный скрипт
-
-Копия проекта в новую папку с чистым `git init` (без привязки к старому remote):
-
-```powershell
-python scripts\setup_new_github_project.py
-```
-
-## Локальные данные (не в Git)
-
-- `assistant_api/chroma_db/`, `assistant_api/chroma_db_backup_*/`, `assistant_api/chroma_db_recovered_*/`
-- `assistant_api/*.db`, `assistant_api/logs/`, `tmp_chroma_test/`, `tmp_chroma_test2/`
-- `.env`, `venv/`, `__pycache__/`
-
-Папки `assistant_api/knowledge/<роль>/` в репозитории остаются пустыми (только `.gitkeep`). Папка `assistant_api/data/` (если создадите локально) тоже не отслеживается Git.
-
