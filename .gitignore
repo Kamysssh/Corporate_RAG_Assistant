@@ -49,6 +49,10 @@ assistant_api/logs/
 # Локальная папка data (код использует knowledge/; сюда можно класть свои выгрузки)
 assistant_api/data/
 
+# Экспорт логов (Telegram / CLI) — не в репозиторий
+assistant_api/corp_rag_logs_*.csv
+assistant_api/logs_console_export_*.csv
+
 # =========================
 # IDE / OS
 # =========================
