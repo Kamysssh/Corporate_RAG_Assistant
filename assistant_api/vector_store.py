@@ -20,12 +20,63 @@ from openai_client import create_openai_client
 
 logger = logging.getLogger(__name__)
 
+# После сбоя Chroma данные могут оказаться в chroma_db_recovered_*; новый процесс
+# иначе открывал бы пустой chroma_db. Маркер фиксирует актуальный каталог.
+_CHROMA_ACTIVE_MARKER = Path(__file__).resolve().parent / ".chroma_active_path"
 
-env_path = Path(__file__).parent.parent / '.env'
+
+def _chroma_dir_nonempty(path: Path) -> bool:
+    if not path.is_dir():
+        return False
+    try:
+        next(path.iterdir())
+    except StopIteration:
+        return False
+    return True
+
+
+def _write_chroma_active_marker(path: str) -> None:
+    try:
+        _CHROMA_ACTIVE_MARKER.write_text(str(Path(path).resolve()), encoding="utf-8")
+    except OSError as exc:
+        logger.warning("Не удалось записать маркер ChromaDB: %s", exc)
+
+
+def _resolve_chroma_persist_directory(explicit: str | None) -> str:
+    """Каталог на диске для PersistentClient: непустой chroma_db или последний recovered."""
+    if explicit is not None:
+        return str(Path(explicit).resolve())
+    parent = Path(__file__).resolve().parent
+    default = parent / "chroma_db"
+    if _chroma_dir_nonempty(default):
+        return str(default.resolve())
+    if _CHROMA_ACTIVE_MARKER.exists():
+        try:
+            alt = Path(_CHROMA_ACTIVE_MARKER.read_text(encoding="utf-8").strip())
+            if _chroma_dir_nonempty(alt):
+                logger.info("ChromaDB: каталог из .chroma_active_path: %s", alt)
+                return str(alt.resolve())
+        except OSError:
+            pass
+    recovered = sorted(
+        parent.glob("chroma_db_recovered_*"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for d in recovered:
+        if _chroma_dir_nonempty(d):
+            logger.warning(
+                "ChromaDB: основной chroma_db пуст/отсутствует, используется %s", d.name
+            )
+            _write_chroma_active_marker(str(d))
+            return str(d.resolve())
+    return str(default.resolve())
+
+
+env_path = Path(__file__).parent.parent / ".env"
 if env_path.exists():
     load_dotenv(env_path)
 else:
-    # Пытаемся загрузить из текущей директории
     load_dotenv()
 
 
@@ -41,9 +92,7 @@ class VectorStore:
             persist_directory: директория для хранения данных
         """
         self.collection_name = collection_name
-        if persist_directory is None:
-            persist_directory = str(Path(__file__).resolve().parent / "chroma_db")
-        self.persist_directory = persist_directory
+        self.persist_directory = _resolve_chroma_persist_directory(persist_directory)
         
         # Инициализация ChromaDB клиента
         self.client = self._init_client_with_recovery()
@@ -110,6 +159,7 @@ class VectorStore:
                         "Переключение на новую директорию ChromaDB: %s",
                         self.persist_directory,
                     )
+                    _write_chroma_active_marker(self.persist_directory)
                     return chromadb.PersistentClient(
                         path=self.persist_directory
                     )

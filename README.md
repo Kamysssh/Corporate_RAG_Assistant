@@ -1,88 +1,84 @@
-# Корпоративные нейроассистенты (OpenAI + RAG)
+# Корпоративный RAG-ассистент (OpenAI + Chroma)
 
-Учебный CLI-проект: три роли ассистента для автодилера — **HR**, **постпродажа**, **продажи**. База знаний подтягивается из **Google Docs** (просмотр по ссылке; URL по умолчанию в `assistant_api/config.py`, переопределение в `.env`), с **семантическим кешированием** повторяющихся вопросов. Интеграция только с **OpenAI**.
-
-## Дальнейшее развитие
-
-Интеграция в **Telegram**, **виджет чата на сайте**, CRM или другие каналы возможна **после отдельного согласования ТЗ с заказчиком** (формат сообщений, авторизация, эскалация к оператору, SLA). Текущий репозиторий — ядро RAG + CLI; оболочка под конкретную платформу намеренно не зафиксирована.
+Портфолио-кейс: три **роли** для сценария автодилера — **HR**, **постпродажа**, **продажи**. Текст для индексации подтягивается из **Google Docs** (ссылки по умолчанию в `assistant_api/config.py`, переопределение через `KNOWLEDGE_<РОЛЬ>_GOOGLE_DOCS` в `.env`). Диалог — **CLI** или **Telegram**; обращения пишутся в **SQLite** для метрик; семантический **кеш** ответов — отдельная SQLite-база.
 
 ## Возможности
 
-- Три изолированные коллекции ChromaDB (`corp_hr`, `corp_post_sales`, `corp_sales`); источник текста при индексации — Google Docs по роли.
-- Промпты вынесены в `assistant_api/prompts.py` (цели, задачи, сценарии, ограничения, примеры FAQ).
-- **Семантический кеш** (SQLite): сначала точное совпадение вопроса, затем сравнение embedding вопроса с сохранёнными (cosine similarity), порог по умолчанию `0.88` (`SEMANTIC_CACHE_THRESHOLD` в `.env`).
-- **Логи**: консоль + файл `assistant_api/logs/app.log`.
-- Параметры LLM: температура **0.4**, **max_tokens 500** (`assistant_api/config.py`).
+- Три коллекции ChromaDB (`corp_hr`, `corp_post_sales`, `corp_sales`).
+- Промпты — `assistant_api/prompts.py`.
+- **Семантический кеш** (`corporate_rag_cache.db`): точное и семантическое совпадение вопроса; порог `SEMANTIC_CACHE_THRESHOLD` (по умолчанию `0.88`).
+- **Логи взаимодействий** (`assistant_api/logs.db`): вопрос, ответ, роль, источник (`console` / `telegram`), кеш, время ответа; для Telegram — `user_id` и ник. Экспорт CSV в **UTF-8 с BOM** для корректного открытия в **Excel (Windows)**.
+- **Технические логи**: консоль + `assistant_api/logs/app.log`.
+- **Telegram**: `/start`, `/help`, `/hr`, `/post_sales`, `/sales`, `/stats`, `/logs`.
 
 ## Стек
 
 | Компонент | Технологии |
 |-----------|------------|
 | Язык | Python 3.12 |
-| Чат (LLM) | OpenAI API (при необходимости — `OPENAI_BASE_URL` в `.env`) |
-| Эмбеддинги RAG | OpenAI Embeddings **или** локально `sentence-transformers` (`EMBEDDINGS_BACKEND=local`, по умолчанию — удобно при 403 region на Embeddings) |
-| Векторный поиск | ChromaDB (локально) |
-| Кеш | SQLite |
+| Чат (LLM) | OpenAI API (`OPENAI_BASE_URL` при необходимости) |
+| Эмбеддинги | OpenAI или `sentence-transformers` (`EMBEDDINGS_BACKEND`) |
+| Векторный поиск | ChromaDB |
+| Кеш ответов | SQLite |
+| Логи диалогов | SQLite (`db_logger.py`) |
+| Интерфейс | CLI + `python-telegram-bot` |
 
 ## Установка
 
 ```powershell
-cd "путь\к\проекту"
+cd "путь\к\Corporate_RAG_Assistant"
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 Copy-Item .env.example .env
-# Укажите OPENAI_API_KEY в .env
 ```
 
-Опционально: установить Python 3.12 через Windows — `winget install Python.Python.3.12`. Если `pypi.org` недоступен, можно указать зеркало, например:
+В `.env`: `OPENAI_API_KEY`; для бота — `TELEGRAM_BOT_TOKEN` ([@BotFather](https://t.me/BotFather)); при необходимости ссылки на документы — `KNOWLEDGE_HR_GOOGLE_DOCS` и аналоги (см. `.env.example`). **Не коммитьте** `.env`.
 
-`python -m pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com`
+## Переиндексация (обязательна до первого диалога)
 
-## Переиндексация базы знаний
+Индексация строит Chroma из экспорта Google Docs (документы должны быть доступны по ссылке для просмотра).
 
-При **каждом** запуске `assistant_api/app.py` в терминале снова появляется **запрос**: выполнить ли полную переиндексацию всех ролей (как `reindex.py --role all`). Ответ `y` / `да` подтягивает актуальный текст из Google Docs; `N` / Enter — пропуск, если документы и ссылки не менялись.
-
-Чтобы пользователь не получал устаревшие ответы, после успешной переиндексации кеш очищается автоматически:
-- `reindex.py --role hr|post_sales|sales` — очищается кеш только выбранной роли;
-- `reindex.py --role all` (и ответ `y` на старте `app.py`) — очищается кеш всех ролей.
-
-После изменения текста в Google Docs (или ссылок в `config` / `.env`) можно либо согласиться на запрос при старте, либо выполнить вручную (из корня репозитория):
-
-```powershell
-.\venv\Scripts\python.exe reindex.py --role hr
-.\venv\Scripts\python.exe reindex.py --role post_sales
-.\venv\Scripts\python.exe reindex.py --role sales
-```
-
-Все роли сразу:
+- При запуске **CLI** (`app.py`, режим 1) можно согласиться на запрос переиндексации (**y**), либо вручную из **корня** репозитория:
 
 ```powershell
 .\venv\Scripts\python.exe reindex.py --role all
 ```
 
-## Запуск ассистента в терминале
+- Для **Telegram** интерактивного запроса нет — на сервере **один раз** выполните `python reindex.py --role all` после `git clone` и настройки `.env`.
+
+После успешной переиндексации кеш ответов для затронутых ролей очищается автоматически.
+
+**Важно:** и CLI, и Telegram используют **одну** папку векторной базы — `assistant_api/chroma_db/` (не в Git). Пока индексация не выполнена, коллекции пусты.
+
+## Запуск
 
 ```powershell
 .\venv\Scripts\python.exe assistant_api\app.py
 ```
 
-Сначала обработайте запрос на переиндексацию (см. раздел выше). Дальше выберите роль (1 — HR, 2 — постпродажа, 3 — продажи).
+1. **CLI** — режим 1: роль, вопросы в терминале. Команды: `stats`, `logs` (CSV по логам консоли), `clear`, `role`, `help`, `exit`.
+2. **Telegram** — режим 2, если задан `TELEGRAM_BOT_TOKEN`.
 
-Доступные команды в чате:
+## Деплой на VPS (Linux, кратко)
 
-- `stats` — показывает техническую сводку по текущей роли: имя коллекции Chroma, число чанков в векторной базе, статистику кеша (сколько записей, размер БД, даты), текущую модель. Полезно для проверки, что база действительно загружена и кеш работает.
-- `clear` — очищает кеш ответов только для текущей роли (после подтверждения). Используйте, если меняли документы/промпты и хотите исключить старые кешированные ответы в диалоге.
-- `role` — переключает роль ассистента без перезапуска приложения (`hr` / `post_sales` / `sales`). Удобно для тестов разных сценариев в одной сессии.
-- `help` — повторно выводит подсказку по ролям и их назначениям. Нужна, когда забыли номер роли или хотите быстро свериться.
-- `exit` (или `quit`, `q`) — корректно завершает работу CLI-ассистента.
+1. `git clone … && cd Corporate_RAG_Assistant && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt`
+2. Создайте `.env` на сервере (`nano .env`), без коммита в Git.
+3. `python reindex.py --role all`
+4. Фон: `screen` / `tmux` → `python assistant_api/app.py` → **2** для Telegram (или `systemd` + переменные окружения / `EnvironmentFile`).
+
+## Конфиденциальность
+
+- Секреты не в репозитории; в логах SQLite хранятся тексты вопросов и ответов — учтите политику хранения и ПДн.
+- Локально не в Git: `chroma_db/`, `*.db`, `logs/`, `.env`, `venv/`.
 
 ## Оценка качества (RAGAS, опционально)
-
-Для роли HR (тот же источник, что в `DEFAULT_KNOWLEDGE_GOOGLE_DOCS`):
 
 ```powershell
 .\venv\Scripts\python.exe assistant_api\evaluate_ragas.py
 ```
 
+## Лицензия
+
+Укажите лицензию при публикации репозитория, если планируете открытый код.

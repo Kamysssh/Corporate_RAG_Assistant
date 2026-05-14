@@ -7,11 +7,13 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from config import ASSISTANT_ROLES, EMBEDDINGS_BACKEND, ROLE_LABELS
+from db_logger import DatabaseLogger
 from prompts import get_prompt
 from rag_pipeline import RAGPipeline
 from reindex_runner import reindex_all_roles
@@ -70,7 +72,7 @@ def print_banner():
     banner = """
 ╔══════════════════════════════════════════════════════════╗
 ║   Корпоративные нейроассистенты (OpenAI + RAG)           ║
-║   Учебный проект: автодилер                              ║
+║   кейс: автодилер (HR / постпродажа / продажи)           ║
 ╚══════════════════════════════════════════════════════════╝
 """
     print(banner)
@@ -79,8 +81,8 @@ def print_banner():
             "Эмбеддинги: локально (sentence-transformers). Ответы в чате — через OpenAI.\n"
             "Смена openai↔local требует переиндексации (разная размерность векторов).\n"
         )
-    print("Команды: exit | quit — выход; stats — статистика; clear — очистить кеш текущей роли;")
-    print("          role — сменить роль; help — подсказка по ролям.\n")
+    print("Команды: exit | quit — выход; stats — статистика; logs — экспорт логов (SQLite) в CSV;")
+    print("          clear — очистить кеш текущей роли; role — сменить роль; help — подсказка по ролям.\n")
 
 
 def print_help():
@@ -132,7 +134,7 @@ def print_response(result: dict):
     print(f"{'─'*60}\n")
 
 
-def print_stats(pipeline: RAGPipeline):
+def print_stats(pipeline: RAGPipeline, interaction_logger: DatabaseLogger | None = None):
     stats = pipeline.get_stats()
     print(f"\n{'═'*60}")
     print("📊 СТАТИСТИКА")
@@ -153,10 +155,17 @@ def print_stats(pipeline: RAGPipeline):
     if ch.get("newest_entry"):
         print(f"   Последняя запись: {ch['newest_entry']}")
     print(f"\n🤖 Модель чата: {stats['model']}")
+    if interaction_logger:
+        ls = interaction_logger.get_stats()
+        print("\n📝 Логи взаимодействий (SQLite):")
+        print(f"   Всего записей: {ls['total_requests']}")
+        print(f"   Из кеша (по логам): {ls['cached_requests']}")
+        print(f"   По ролям: {ls.get('by_role') or '—'}")
+        print(f"   Среднее время ответа: {float(ls['avg_response_time_ms'] or 0):.0f} мс")
     print(f"{'═'*60}\n")
 
 
-def main():
+def run_cli() -> None:
     setup_logging()
     print_banner()
 
@@ -174,6 +183,8 @@ def main():
     try:
         logger.info("Старт приложения, роль=%s", role)
         pipeline = RAGPipeline(role=role)
+        log_db = Path(__file__).resolve().parent / "logs.db"
+        interaction_logger = DatabaseLogger(db_path=str(log_db))
         print("✅ Система готова. Введите вопрос.\n")
     except Exception as e:
         logger.exception("Ошибка инициализации: %s", e)
@@ -189,7 +200,13 @@ def main():
                 break
 
             if user_input.lower() == "stats":
-                print_stats(pipeline)
+                print_stats(pipeline, interaction_logger)
+                continue
+
+            if user_input.lower() == "logs":
+                out = Path(__file__).resolve().parent / f"logs_console_export_{int(time.time())}.csv"
+                interaction_logger.export_to_csv(output_path=str(out), source="console")
+                print(f"✅ Логи (источник console) сохранены: {out}\n")
                 continue
 
             if user_input.lower() == "help":
@@ -220,8 +237,32 @@ def main():
                 print("⚠️  Введите вопрос\n")
                 continue
 
-            result = pipeline.query(user_input)
+            start = time.time()
+            try:
+                result = pipeline.query(user_input)
+            except Exception as e:
+                logger.exception("Ошибка запроса: %s", e)
+                err_text = f"Ошибка при обработке запроса: {e}"
+                print(f"\n❌ {err_text}\n")
+                interaction_logger.log_interaction(
+                    query=user_input,
+                    response=err_text,
+                    source="console",
+                    role=pipeline.role,
+                    from_cache=False,
+                    response_time_ms=int((time.time() - start) * 1000),
+                )
+                continue
+
             print_response(result)
+            interaction_logger.log_interaction(
+                query=user_input,
+                response=result.get("answer", ""),
+                source="console",
+                role=pipeline.role,
+                from_cache=bool(result.get("from_cache")),
+                response_time_ms=int((time.time() - start) * 1000),
+            )
 
         except KeyboardInterrupt:
             print("\n\n👋 Прервано. До свидания!")
@@ -229,6 +270,27 @@ def main():
         except Exception as e:
             logger.exception("Ошибка обработки: %s", e)
             print(f"\n❌ Ошибка: {e}\n")
+
+
+def main() -> None:
+    """CLI или Telegram в зависимости от выбора и TELEGRAM_BOT_TOKEN в .env."""
+    print("\n=== Режим запуска ===")
+    print("1 — CLI (выбор роли, вопросы в терминале)")
+    print("2 — Telegram-бот (чат, команды /hr, /post_sales, /sales, /stats, /logs)")
+    has_tg = bool(os.getenv("TELEGRAM_BOT_TOKEN", "").strip())
+    if not has_tg:
+        print("\n(В .env нет TELEGRAM_BOT_TOKEN — режим 2 недоступен. Скопируйте токен от @BotFather.)")
+    choice = input("\nВведите 1 или 2 [по умолчанию 1]: ").strip() or "1"
+    if choice == "2":
+        if not has_tg:
+            print("❌ Задайте TELEGRAM_BOT_TOKEN в .env в корне репозитория.")
+            sys.exit(1)
+        setup_logging()
+        from telegram_bot import run_telegram_bot
+
+        run_telegram_bot()
+        return
+    run_cli()
 
 
 if __name__ == "__main__":

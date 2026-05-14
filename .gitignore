@@ -33,6 +33,9 @@ client_secret*.json
 *.sqlite3
 *.log
 
+# Указатель на актуальный каталог Chroma после chroma_db_recovered_* (см. vector_store.py)
+assistant_api/.chroma_active_path
+
 # ChromaDB local storage and backups
 **/chroma_db/
 **/chroma_db_backup_*/
