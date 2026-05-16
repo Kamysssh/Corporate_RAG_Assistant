@@ -12,19 +12,19 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from config import ASSISTANT_ROLES, EMBEDDINGS_BACKEND, ROLE_LABELS
+# .env в корне репозитория — до импорта config (иначе EMBEDDINGS_BACKEND остаётся local)
+env_path = Path(__file__).resolve().parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+else:
+    load_dotenv()
+
+from config import ASSISTANT_ROLES, ROLE_LABELS, get_embeddings_backend
 from openai_settings import resolve_openai_api_key
 from db_logger import DatabaseLogger
 from prompts import get_prompt
 from rag_pipeline import RAGPipeline
 from reindex_runner import reindex_all_roles
-
-# .env в корне репозитория
-env_path = Path(__file__).parent.parent / ".env"
-if env_path.exists():
-    load_dotenv(env_path)
-else:
-    load_dotenv()
 
 
 def setup_logging() -> None:
@@ -77,7 +77,7 @@ def print_banner():
 ╚══════════════════════════════════════════════════════════╝
 """
     print(banner)
-    if EMBEDDINGS_BACKEND == "local":
+    if get_embeddings_backend() == "local":
         print(
             "Эмбеддинги: локально (sentence-transformers). Ответы в чате — через OpenAI.\n"
             "Смена openai↔local требует переиндексации (разная размерность векторов).\n"

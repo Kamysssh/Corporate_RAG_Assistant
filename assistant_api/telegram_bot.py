@@ -17,6 +17,12 @@ from telegram.error import TimedOut
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 from telegram.request import HTTPXRequest
 
+_env_path = Path(__file__).resolve().parent.parent / ".env"
+if _env_path.exists():
+    load_dotenv(_env_path)
+else:
+    load_dotenv()
+
 from config import ASSISTANT_ROLES, ROLE_LABELS
 from openai_settings import resolve_openai_api_key
 from db_logger import DatabaseLogger
@@ -259,11 +265,6 @@ class CorporateTelegramBot:
 
 def run_telegram_bot() -> None:
     """Точка входа для режима Telegram (после настройки .env и индексации)."""
-    env_path = Path(__file__).resolve().parent.parent / ".env"
-    if env_path.exists():
-        load_dotenv(env_path)
-    else:
-        load_dotenv()
     if not resolve_openai_api_key():
         print(
             "Задайте OPENAI_API_KEY или PROXYAPI_KEY "

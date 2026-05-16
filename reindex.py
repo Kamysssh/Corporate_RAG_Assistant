@@ -48,6 +48,10 @@ def main() -> None:
     args = parser.parse_args()
     _load_env()
 
+    import os
+
+    print(f"EMBEDDINGS_BACKEND={os.getenv('EMBEDDINGS_BACKEND', '(не задан)')}")
+
     reindex_role, reindex_all_roles = _import_runner()
     try:
         if args.role == "all":

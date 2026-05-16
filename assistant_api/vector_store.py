@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Tuple
 import chromadb
 from dotenv import load_dotenv
 
-from config import EMBEDDINGS_BACKEND
+from config import get_embeddings_backend
 from embeddings import embed_text
 from openai_client import create_openai_client
 
@@ -111,7 +111,7 @@ class VectorStore:
         
         # Для EMBEDDINGS_BACKEND=openai нужен клиент; для local — только Chroma + локальная модель
         self.openai_client = (
-            create_openai_client() if EMBEDDINGS_BACKEND == "openai" else None
+            create_openai_client() if get_embeddings_backend() == "openai" else None
         )
 
     def _create_collection(self):

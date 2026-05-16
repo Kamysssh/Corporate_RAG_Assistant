@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from config import EMBEDDING_MODEL, EMBEDDINGS_BACKEND, LOCAL_EMBEDDING_MODEL
+from config import EMBEDDING_MODEL, LOCAL_EMBEDDING_MODEL, get_embeddings_backend
 
 if TYPE_CHECKING:
     from openai import OpenAI
@@ -46,7 +46,7 @@ def embed_text(text: str, openai_client: "OpenAI | None" = None) -> list[float]:
     if not text or not str(text).strip():
         raise ValueError("Пустой текст для embedding")
 
-    if EMBEDDINGS_BACKEND == "local":
+    if get_embeddings_backend() == "local":
         return _embed_local(text)
 
     if openai_client is None:

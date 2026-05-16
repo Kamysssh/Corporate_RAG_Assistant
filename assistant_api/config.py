@@ -23,9 +23,17 @@ LLM_MAX_TOKENS = 500
 # Embeddings (для RAG и семантического кеша)
 EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small").strip()
 
-# openai — только OpenAI Embeddings API; local — sentence-transformers на ПК (если 403 region на Embeddings)
-_eb = os.getenv("EMBEDDINGS_BACKEND", "local").strip().lower()
-EMBEDDINGS_BACKEND = _eb if _eb in ("openai", "local") else "local"
+# openai — OpenAI/ProxyAPI Embeddings; local — sentence-transformers (нужен pip install sentence-transformers)
+
+
+def get_embeddings_backend() -> str:
+    """Читает EMBEDDINGS_BACKEND из окружения при каждом вызове (после load_dotenv)."""
+    eb = os.getenv("EMBEDDINGS_BACKEND", "local").strip().lower()
+    return eb if eb in ("openai", "local") else "local"
+
+
+# Для совместимости; предпочтительно get_embeddings_backend() после load_dotenv
+EMBEDDINGS_BACKEND = get_embeddings_backend()
 
 LOCAL_EMBEDDING_MODEL = os.getenv(
     "LOCAL_EMBEDDING_MODEL",
