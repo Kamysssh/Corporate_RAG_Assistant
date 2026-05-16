@@ -35,13 +35,37 @@
 
 | Компонент | Технологии |
 |-----------|------------|
-| Язык | Python 3.12 |
-| Чат (LLM) | OpenAI API (`OPENAI_BASE_URL` при необходимости) |
-| Эмбеддинги | OpenAI или `sentence-transformers` (`EMBEDDINGS_BACKEND`) |
+| Язык | Python 3.12+ |
+| Чат (LLM) | OpenAI API или [ProxyAPI](https://proxyapi.ru) (совместимый API) |
+| Эмбеддинги | OpenAI / ProxyAPI (`EMBEDDINGS_BACKEND=openai`) или локально `sentence-transformers` (`local`) |
 | Векторный поиск | ChromaDB |
 | Кеш ответов | SQLite |
 | Логи диалогов | SQLite (`db_logger.py`) |
 | Интерфейс | CLI + `python-telegram-bot` |
+
+## ProxyAPI (РФ, VPS, без прямого OpenAI)
+
+[ProxyAPI](https://proxyapi.ru) — доступ к моделям OpenAI из России без VPN: чат и эмбеддинги идут через прокси-шлюз, оплата в рублях.
+
+Настройка в **`.env`** (пример — `.env.example`):
+
+```env
+OPENAI_API_PROVIDER=proxyapi
+PROXYAPI_KEY=ваш_ключ_из_личного_кабинета
+EMBEDDINGS_BACKEND=openai
+```
+
+По умолчанию используется endpoint `https://api.proxyapi.ru/openai/v1` (модели как у OpenAI: `gpt-4o-mini`, `text-embedding-3-small`). Переопределение — `PROXYAPI_BASE_URL` или общий `OPENAI_BASE_URL`.
+
+Логика в коде: `assistant_api/openai_settings.py` → `assistant_api/openai_client.py` (единый клиент для RAG, кеша и чата).
+
+| Режим | Переменные | Когда |
+|-------|------------|--------|
+| **ProxyAPI** | `OPENAI_API_PROVIDER=proxyapi`, `PROXYAPI_KEY` | VPS Reg.ru, РФ, ошибка 403 region |
+| **OpenAI напрямую** | `OPENAI_API_KEY`, без `OPENAI_API_PROVIDER=proxyapi` | За пределами блокировок IP |
+| **Локальные эмбеддинги** | `EMBEDDINGS_BACKEND=local` | Нет доступа к Embeddings API; нужен `pip install sentence-transformers` |
+
+На VPS с ProxyAPI **не** используйте `EMBEDDINGS_BACKEND=local`, если не установлен `sentence-transformers` (тяжёлый PyTorch).
 
 ## Установка
 
@@ -54,21 +78,23 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-В `.env`: ключ API и `TELEGRAM_BOT_TOKEN` ([@BotFather](https://t.me/BotFather)); при необходимости ссылки на документы — `KNOWLEDGE_HR_GOOGLE_DOCS` и аналоги (см. `.env.example`). **Не коммитьте** `.env`.
-
-**ProxyAPI (РФ / VPS):** в `.env` задайте `OPENAI_API_PROVIDER=proxyapi` и `PROXYAPI_KEY` (ключ с [proxyapi.ru](https://proxyapi.ru)); `EMBEDDINGS_BACKEND=openai`. Прямой OpenAI с российского VPS часто даёт 403 — ProxyAPI обходит это.
+В `.env`: ключ API (ProxyAPI или OpenAI), `TELEGRAM_BOT_TOKEN` ([@BotFather](https://t.me/BotFather)); при необходимости ссылки на документы — `KNOWLEDGE_HR_GOOGLE_DOCS` и аналоги. **Не коммитьте** `.env`.
 
 ## Переиндексация (обязательна до первого диалога)
 
 Индексация строит Chroma из экспорта Google Docs (документы должны быть доступны по ссылке для просмотра).
 
-- При запуске **CLI** (`app.py`, режим 1) можно согласиться на запрос переиндексации (**y**), либо вручную из **корня** репозитория:
+- Рекомендуется из **корня** репозитория (так надёжно подхватывается `.env`):
 
 ```powershell
 .\venv\Scripts\python.exe reindex.py --role all
 ```
 
-- Для **Telegram** интерактивного запроса нет — на сервере **один раз** выполните `python reindex.py --role all` после `git clone` и настройки `.env`.
+В начале вывода будет строка `EMBEDDINGS_BACKEND=...` — для ProxyAPI должно быть `openai`.
+
+- При запуске **CLI** (`app.py`, режим 1) можно согласиться на переиндексацию (**y**), но удобнее всегда использовать `reindex.py` выше.
+
+- Для **Telegram** на сервере **один раз** выполните `python reindex.py --role all` после `git clone` и настройки `.env` с ProxyAPI.
 
 После успешной переиндексации кеш ответов для затронутых ролей очищается автоматически.
 
@@ -85,10 +111,21 @@ Copy-Item .env.example .env
 
 ## Деплой на VPS (Linux, кратко)
 
-1. `git clone … && cd Corporate_RAG_Assistant && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt`
-2. Создайте `.env` на сервере (`nano .env`): для Reg.ru/РФ — **ProxyAPI** (`OPENAI_API_PROVIDER=proxyapi`, `PROXYAPI_KEY`), см. `.env.example`.
-3. `python reindex.py --role all`
-4. Фон: `screen` / `tmux` → `python assistant_api/app.py` → **2** для Telegram (или `systemd` + `EnvironmentFile`).
+1. `git clone … && cd Corporate_RAG_Assistant && python3 -m venv venv && source venv/bin/activate`
+2. `pip install -r requirements.txt` (на VPS с ProxyAPI и `EMBEDDINGS_BACKEND=openai` пакет `sentence-transformers` не обязателен, если ставите зависимости выборочно).
+3. `.env` на сервере (`nano .env`), минимум для РФ:
+
+   ```env
+   OPENAI_API_PROVIDER=proxyapi
+   PROXYAPI_KEY=...
+   EMBEDDINGS_BACKEND=openai
+   TELEGRAM_BOT_TOKEN=...
+   ```
+
+4. `git pull` при обновлении кода с GitHub, затем `python reindex.py --role all`
+5. Фон: `screen` → `python assistant_api/app.py` → **2** для Telegram. На вопрос о переиндексации при старте можно **N**, если уже выполнили шаг 4.
+
+Прямой OpenAI с IP дата-центра в РФ часто даёт **403** на Embeddings — ProxyAPI это обходит. Telegram к ProxyAPI не относится; при `TimedOut` см. `TELEGRAM_CONNECT_TIMEOUT` / `TELEGRAM_PROXY_URL` в `.env.example`.
 
 ## Конфиденциальность
 
