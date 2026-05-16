@@ -13,6 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from config import ASSISTANT_ROLES, EMBEDDINGS_BACKEND, ROLE_LABELS
+from openai_settings import resolve_openai_api_key
 from db_logger import DatabaseLogger
 from prompts import get_prompt
 from rag_pipeline import RAGPipeline
@@ -169,8 +170,11 @@ def run_cli() -> None:
     setup_logging()
     print_banner()
 
-    if not os.getenv("OPENAI_API_KEY"):
-        print("❌ Не задан OPENAI_API_KEY. Добавьте ключ в .env в корне проекта.")
+    if not resolve_openai_api_key():
+        print(
+            "❌ Не задан ключ API. В .env укажите OPENAI_API_KEY "
+            "или для ProxyAPI: OPENAI_API_PROVIDER=proxyapi и PROXYAPI_KEY."
+        )
         sys.exit(1)
 
     prompt_reindex_on_startup()

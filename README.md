@@ -54,7 +54,9 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-В `.env`: `OPENAI_API_KEY`; для бота — `TELEGRAM_BOT_TOKEN` ([@BotFather](https://t.me/BotFather)); при необходимости ссылки на документы — `KNOWLEDGE_HR_GOOGLE_DOCS` и аналоги (см. `.env.example`). **Не коммитьте** `.env`.
+В `.env`: ключ API и `TELEGRAM_BOT_TOKEN` ([@BotFather](https://t.me/BotFather)); при необходимости ссылки на документы — `KNOWLEDGE_HR_GOOGLE_DOCS` и аналоги (см. `.env.example`). **Не коммитьте** `.env`.
+
+**ProxyAPI (РФ / VPS):** в `.env` задайте `OPENAI_API_PROVIDER=proxyapi` и `PROXYAPI_KEY` (ключ с [proxyapi.ru](https://proxyapi.ru)); `EMBEDDINGS_BACKEND=openai`. Прямой OpenAI с российского VPS часто даёт 403 — ProxyAPI обходит это.
 
 ## Переиндексация (обязательна до первого диалога)
 
@@ -84,9 +86,9 @@ Copy-Item .env.example .env
 ## Деплой на VPS (Linux, кратко)
 
 1. `git clone … && cd Corporate_RAG_Assistant && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt`
-2. Создайте `.env` на сервере (`nano .env`), без коммита в Git.
+2. Создайте `.env` на сервере (`nano .env`): для Reg.ru/РФ — **ProxyAPI** (`OPENAI_API_PROVIDER=proxyapi`, `PROXYAPI_KEY`), см. `.env.example`.
 3. `python reindex.py --role all`
-4. Фон: `screen` / `tmux` → `python assistant_api/app.py` → **2** для Telegram (или `systemd` + переменные окружения / `EnvironmentFile`).
+4. Фон: `screen` / `tmux` → `python assistant_api/app.py` → **2** для Telegram (или `systemd` + `EnvironmentFile`).
 
 ## Конфиденциальность
 

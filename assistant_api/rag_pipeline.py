@@ -22,6 +22,7 @@ from config import (
 from embeddings import embed_text
 from google_docs_knowledge import get_extra_sources_for_role
 from openai_client import create_openai_client
+from openai_settings import resolve_openai_api_key
 from prompts import build_system_prompt
 from vector_store import VectorStore
 
@@ -42,8 +43,10 @@ class RAGPipeline:
         if role not in ASSISTANT_ROLES:
             raise ValueError(f"Роль должна быть одной из {ASSISTANT_ROLES}, получено: {role}")
 
-        if not os.getenv("OPENAI_API_KEY"):
-            raise ValueError("OPENAI_API_KEY не установлен")
+        if not resolve_openai_api_key():
+            raise ValueError(
+                "Не задан OPENAI_API_KEY или PROXYAPI_KEY (OPENAI_API_PROVIDER=proxyapi)"
+            )
 
         self.role = role
         self.model = model or DEFAULT_CHAT_MODEL

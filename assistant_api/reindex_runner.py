@@ -8,6 +8,7 @@ import logging
 import os
 
 from config import ASSISTANT_ROLES
+from openai_settings import resolve_openai_api_key
 from rag_pipeline import RAGPipeline
 
 logger = logging.getLogger(__name__)
@@ -17,8 +18,10 @@ def reindex_role(role: str) -> None:
     """Принудительная переиндексация одной роли."""
     if role not in ASSISTANT_ROLES:
         raise ValueError(f"Неизвестная роль: {role}. Ожидается одна из {ASSISTANT_ROLES}")
-    if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("Задайте OPENAI_API_KEY в .env")
+    if not resolve_openai_api_key():
+        raise RuntimeError(
+            "Задайте OPENAI_API_KEY или PROXYAPI_KEY (OPENAI_API_PROVIDER=proxyapi) в .env"
+        )
 
     os.environ["RAG_FORCE_REINDEX"] = "1"
     try:
@@ -32,8 +35,10 @@ def reindex_role(role: str) -> None:
 
 def reindex_all_roles() -> None:
     """Переиндексация всех коллекций (hr, post_sales, sales)."""
-    if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("Задайте OPENAI_API_KEY в .env")
+    if not resolve_openai_api_key():
+        raise RuntimeError(
+            "Задайте OPENAI_API_KEY или PROXYAPI_KEY (OPENAI_API_PROVIDER=proxyapi) в .env"
+        )
 
     os.environ["RAG_FORCE_REINDEX"] = "1"
     try:

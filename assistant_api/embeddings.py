@@ -69,7 +69,8 @@ def embed_text(text: str, openai_client: "OpenAI | None" = None) -> list[float]:
         ):
             raise RuntimeError(
                 "OpenAI Embeddings недоступен из вашего региона (403). "
-                "В .env укажите EMBEDDINGS_BACKEND=local и заново выполните переиндексацию "
-                "(y при запуске или python reindex.py --role all)."
+                "На VPS укажите ProxyAPI: OPENAI_API_PROVIDER=proxyapi и PROXYAPI_KEY в .env, "
+                "либо EMBEDDINGS_BACKEND=local и заново выполните переиндексацию "
+                "(python reindex.py --role all)."
             ) from exc
         raise

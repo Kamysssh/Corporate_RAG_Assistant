@@ -13,9 +13,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from telegram import Update
+from telegram.error import TimedOut
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.request import HTTPXRequest
 
 from config import ASSISTANT_ROLES, ROLE_LABELS
+from openai_settings import resolve_openai_api_key
 from db_logger import DatabaseLogger
 from rag_pipeline import RAGPipeline
 
@@ -26,6 +29,38 @@ def _default_log_path() -> Path:
     return Path(__file__).resolve().parent / "logs.db"
 
 
+def _telegram_http_request() -> HTTPXRequest:
+    """
+    HTTP-клиент для api.telegram.org.
+    По умолчанию таймауты 60 с (в PTB — 5 с), иначе в РФ часто TimedOut.
+    TELEGRAM_PROXY_URL — socks5://127.0.0.1:1080 или http://... при блокировке.
+    """
+    connect = float(os.getenv("TELEGRAM_CONNECT_TIMEOUT", "60"))
+    read = float(os.getenv("TELEGRAM_READ_TIMEOUT", "60"))
+    write = float(os.getenv("TELEGRAM_WRITE_TIMEOUT", "60"))
+    pool = float(os.getenv("TELEGRAM_POOL_TIMEOUT", "30"))
+    proxy = os.getenv("TELEGRAM_PROXY_URL", "").strip() or None
+    kwargs: dict = {
+        "connect_timeout": connect,
+        "read_timeout": read,
+        "write_timeout": write,
+        "pool_timeout": pool,
+    }
+    if proxy:
+        kwargs["proxy"] = proxy
+        logger.info("Telegram API: прокси %s", proxy.split("@")[-1])
+    return HTTPXRequest(**kwargs)
+
+
+def _build_application(token: str) -> Application:
+    return (
+        Application.builder()
+        .token(token)
+        .request(_telegram_http_request())
+        .build()
+    )
+
+
 class CorporateTelegramBot:
     """Бот: выбор роли командами, вопросы в чат, /stats и экспорт /logs."""
 
@@ -33,7 +68,7 @@ class CorporateTelegramBot:
         self.token = token
         self.db = db_logger
         self._pipelines: dict[str, RAGPipeline] = {}
-        self.application = Application.builder().token(token).build()
+        self.application = _build_application(token)
         self.application.add_handler(CommandHandler("start", self.start_command))
         self.application.add_handler(CommandHandler("help", self.help_command))
         self.application.add_handler(CommandHandler("stats", self.stats_command))
@@ -209,7 +244,17 @@ class CorporateTelegramBot:
 
     def run(self) -> None:
         print("Telegram-бот запущен. Ctrl+C — остановка.")
-        self.application.run_polling()
+        try:
+            self.application.run_polling(bootstrap_retries=5)
+        except TimedOut:
+            print(
+                "\n❌ Не удалось подключиться к Telegram (таймаут).\n"
+                "  • Проверьте интернет и доступ к api.telegram.org\n"
+                "  • В РФ часто нужен VPN или прокси: TELEGRAM_PROXY_URL в .env\n"
+                "    (socks5://127.0.0.1:ПОРТ — при pip install \"python-telegram-bot[socks]\")\n"
+                "  • Увеличьте TELEGRAM_CONNECT_TIMEOUT=120 в .env\n"
+            )
+            raise
 
 
 def run_telegram_bot() -> None:
@@ -219,8 +264,11 @@ def run_telegram_bot() -> None:
         load_dotenv(env_path)
     else:
         load_dotenv()
-    if not os.getenv("OPENAI_API_KEY"):
-        print("Задайте OPENAI_API_KEY в .env в корне репозитория.")
+    if not resolve_openai_api_key():
+        print(
+            "Задайте OPENAI_API_KEY или PROXYAPI_KEY "
+            "(при OPENAI_API_PROVIDER=proxyapi) в .env в корне репозитория."
+        )
         return
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:

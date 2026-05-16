@@ -487,8 +487,13 @@ if __name__ == "__main__":
 
     from google_docs_knowledge import get_extra_sources_for_role
 
-    if not os.getenv("OPENAI_API_KEY"):
-        print("Ошибка: установите переменную окружения OPENAI_API_KEY")
+    from openai_settings import resolve_openai_api_key
+
+    if not resolve_openai_api_key():
+        print(
+            "Ошибка: задайте OPENAI_API_KEY или PROXYAPI_KEY "
+            "(OPENAI_API_PROVIDER=proxyapi) в .env"
+        )
         sys.exit(1)
 
     _here = Path(__file__).resolve().parent
